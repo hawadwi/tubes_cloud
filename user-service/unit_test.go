@@ -3,58 +3,78 @@ package main
 import "testing"
 
 func TestRegister(t *testing.T) {
-	repo := NewUserRepository(nil)
-	service := NewUserService(repo)
-
-	user, err := service.Register("Ula", "ula@mail.com", "123", "customer")
+	user, err := Register("Ula", "ula@mail.com", "123", "customer")
 	if err != nil {
-		t.Logf("Register returned error (expected in unit test): %v", err)
+		t.Errorf("Register returned error: %v", err)
 	}
 
-	if user != nil && user.UserID > 0 {
-		t.Logf("User registered successfully with ID: %d", user.UserID)
+	if user.UserID <= 0 {
+		t.Errorf("Expected UserID > 0, got %d", user.UserID)
+	}
+
+	if user.Email != "ula@mail.com" {
+		t.Errorf("Expected email ula@mail.com, got %s", user.Email)
 	}
 }
 
 func TestLogin(t *testing.T) {
-	repo := NewUserRepository(nil)
-	service := NewUserService(repo)
+	// First register a user
+	Register("Ula2", "ula2@mail.com", "123", "admin")
 
-	service.Register("Ula2", "ula2@mail.com", "123", "admin")
-	token, err := service.Login("ula2@mail.com", "123")
+	// Then try to login
+	user, err := Login("ula2@mail.com", "123")
 	if err != nil {
-		t.Logf("Login returned error (expected in unit test): %v", err)
+		t.Errorf("Login returned error: %v", err)
 	}
 
-	if token != "" {
-		t.Logf("Login successful, token received")
+	if user.Email != "ula2@mail.com" {
+		t.Errorf("Expected email ula2@mail.com, got %s", user.Email)
+	}
+}
+
+func TestLoginFailed(t *testing.T) {
+	// Try to login with wrong password
+	_, err := Login("seed@mail.com", "wrongpassword")
+	if err == nil {
+		t.Error("Expected login to fail with wrong password")
 	}
 }
 
 func TestUpdateProfile(t *testing.T) {
-	repo := NewUserRepository(nil)
-	service := NewUserService(repo)
-
-	user, err := service.Register(
-		"A",
-		"a@mail.com",
-		"123",
-		"customer",
-	)
-
+	user, err := Register("TestUser", "test@mail.com", "123", "customer")
 	if err != nil {
-		t.Logf("Register error (expected in unit test): %v", err)
+		t.Errorf("Register returned error: %v", err)
 	}
 
-	if user != nil {
-		ok := service.UpdateProfile(
-			user.UserID,
-			"Bandung",
-			"Fast Delivery",
-		)
+	ok := UpdateProfile(user.UserID, "Bandung", "Fast Delivery")
+	if !ok {
+		t.Error("UpdateProfile should return true")
+	}
 
-		if ok {
-			t.Logf("UpdateProfile successful")
-		}
+	// Verify profile was updated
+	profile := GetProfile(user.UserID)
+	if profile == nil {
+		t.Error("GetProfile returned nil")
+	}
+
+	if profile.Alamat != "Bandung" {
+		t.Errorf("Expected alamat Bandung, got %s", profile.Alamat)
+	}
+
+	if profile.Preferensi != "Fast Delivery" {
+		t.Errorf("Expected preferensi Fast Delivery, got %s", profile.Preferensi)
+	}
+}
+
+func TestGetProfile(t *testing.T) {
+	user, _ := Register("ProfileTest", "profile@mail.com", "123", "customer")
+
+	profile := GetProfile(user.UserID)
+	if profile == nil {
+		t.Error("GetProfile returned nil")
+	}
+
+	if profile.Name != "ProfileTest" {
+		t.Errorf("Expected name ProfileTest, got %s", profile.Name)
 	}
 }
