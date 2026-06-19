@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     environment {
-        // Tag image menggunakan ID build Jenkins
         IMAGE_TAG = "${env.BUILD_ID}"
-        // Ganti 'username-docker-anda' dengan username Docker Hub Anda jika binding credentials otomatis tidak terbaca global
         DOCKER_USERNAME = "hawadwi" 
     }
 
@@ -25,17 +23,16 @@ pipeline {
 
         stage('2. Run Unit Tests') {
             steps {
-                echo '===== Running Unit Tests Sequentially to Save Memory ====='
+                echo '===== Running Unit Tests Sequentially using *.go ====='
                 script {
                     def services = ['user-service', 'order-service', 'tracking-service', 'gudang-service', 'courier-service', 'report-service', 'payment-service']
                     for (service in services) {
                         echo "--- Testing ${service} ---"
                         dir(service) {
-                            // Menghapus flag -race sementara untuk menghemat resource RAM Windows
                             bat '''
                             go version
                             go mod download
-                            go test -v -coverprofile=coverage.out ./...
+                            go test -v *.go -coverprofile=coverage.out
                             '''
                         }
                     }
@@ -45,13 +42,13 @@ pipeline {
 
         stage('3. Code Analysis (go vet)') {
             steps {
-                echo '===== Running Code Analysis Sequentially ====='
+                echo '===== Running Code Analysis Sequentially using *.go ====='
                 script {
                     def services = ['user-service', 'order-service', 'tracking-service', 'gudang-service', 'courier-service', 'report-service', 'payment-service']
                     for (service in services) {
                         echo "--- Vetting ${service} ---"
                         dir(service) {
-                            bat 'go vet ./...'
+                            bat 'go vet *.go'
                         }
                     }
                 }
@@ -145,7 +142,7 @@ pipeline {
                                 set DB_USER=root
                                 set DB_PASSWORD=root
                                 set DB_NAME=${ts.db}
-                                go test -tags=functional -v -run Functional ./...
+                                go test -tags=functional -v -run Functional *.go
                                 """
                             }
                         }
