@@ -23,7 +23,7 @@ pipeline {
 
         stage('2. Run Unit Tests') {
             steps {
-                echo '===== Running Unit Tests Sequentially using *.go ====='
+                echo '===== Running Unit Tests for All Services ====='
                 script {
                     def services = ['user-service', 'order-service', 'tracking-service', 'gudang-service', 'courier-service', 'report-service', 'payment-service']
                     for (service in services) {
@@ -32,7 +32,7 @@ pipeline {
                             bat '''
                             go version
                             go mod download
-                            go test -v *.go -coverprofile=coverage.out
+                            go test ./... -v -coverprofile=coverage.out
                             '''
                         }
                     }
@@ -42,13 +42,13 @@ pipeline {
 
         stage('3. Code Analysis (go vet)') {
             steps {
-                echo '===== Running Code Analysis Sequentially using *.go ====='
+                echo '===== Running Code Analysis for All Services ====='
                 script {
                     def services = ['user-service', 'order-service', 'tracking-service', 'gudang-service', 'courier-service', 'report-service', 'payment-service']
                     for (service in services) {
                         echo "--- Vetting ${service} ---"
                         dir(service) {
-                            bat 'go vet *.go'
+                            bat 'go vet ./...'
                         }
                     }
                 }
@@ -142,7 +142,7 @@ pipeline {
                                 set DB_USER=root
                                 set DB_PASSWORD=root
                                 set DB_NAME=${ts.db}
-                                go test -tags=functional -v -run Functional *.go
+                                go test -tags=functional -v -run Functional ./...
                                 """
                             }
                         }
