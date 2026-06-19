@@ -153,87 +153,145 @@ pipeline {
             }
         }
 
-        stage('6. Push Docker Images') {
+        stage('6. Push Docker Images to Registry') {
             steps {
-                echo '===== Pushing Docker Images ====='
+                echo '===== Pushing Docker Images to Registry ====='
                 script {
-                    withCredentials([usernamePassword(
-                            credentialsId: 'hawadwi',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS')]) {
+                    try {
+                        withCredentials([usernamePassword(
+                                credentialsId: 'hawadwi',
+                                usernameVariable: 'DOCKER_USER',
+                                passwordVariable: 'DOCKER_PASS')]) {
 
-                        bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
+                            bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
 
-                        bat """
-                        docker push ${DOCKER_USERNAME}/user-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/user-service:latest
+                            bat """
+                            docker push ${DOCKER_USERNAME}/user-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/user-service:latest
 
-                        docker push ${DOCKER_USERNAME}/order-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/order-service:latest
+                            docker push ${DOCKER_USERNAME}/order-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/order-service:latest
 
-                        docker push ${DOCKER_USERNAME}/tracking-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/tracking-service:latest
+                            docker push ${DOCKER_USERNAME}/tracking-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/tracking-service:latest
 
-                        docker push ${DOCKER_USERNAME}/gudang-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/gudang-service:latest
+                            docker push ${DOCKER_USERNAME}/gudang-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/gudang-service:latest
 
-                        docker push ${DOCKER_USERNAME}/courier-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/courier-service:latest
+                            docker push ${DOCKER_USERNAME}/courier-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/courier-service:latest
 
-                        docker push ${DOCKER_USERNAME}/report-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/report-service:latest
+                            docker push ${DOCKER_USERNAME}/report-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/report-service:latest
 
-                        docker push ${DOCKER_USERNAME}/payment-service:${IMAGE_TAG}
-                        docker push ${DOCKER_USERNAME}/payment-service:latest
-                        """
-                        bat 'docker logout'
+                            docker push ${DOCKER_USERNAME}/payment-service:${IMAGE_TAG}
+                            docker push ${DOCKER_USERNAME}/payment-service:latest
+                            """
+                            bat 'docker logout'
+                            echo '✓ All images successfully pushed to Docker registry!'
+                        }
+                    } catch (Exception e) {
+                        echo '✗ Failed to push Docker images'
+                        throw e
                     }
                 }
             }
         }
 
-        stage('7. Deploy to AKS') {
+        stage('7. Approval for AKS Deployment') {
             steps {
-                echo '===== Deploying to AKS ====='
-                bat """
-                kubectl set image deployment/user-service user-service=${DOCKER_USERNAME}/user-service:${IMAGE_TAG}
-                kubectl set image deployment/order-service order-service=${DOCKER_USERNAME}/order-service:${IMAGE_TAG}
-                kubectl set image deployment/tracking-service tracking-service=${DOCKER_USERNAME}/tracking-service:${IMAGE_TAG}
-                kubectl set image deployment/gudang-service gudang-service=${DOCKER_USERNAME}/gudang-service:${IMAGE_TAG}
-                kubectl set image deployment/courier-service courier-service=${DOCKER_USERNAME}/courier-service:${IMAGE_TAG}
-                kubectl set image deployment/report-service report-service=${DOCKER_USERNAME}/report-service:${IMAGE_TAG}
-                kubectl set image deployment/payment-service payment-service=${DOCKER_USERNAME}/payment-service:${IMAGE_TAG}
-                """
+                script {
+                    echo '===== Waiting for Approval to Deploy to AKS ====='
+                    def userInput = input(
+                        id: 'AKSDeploymentApproval',
+                        message: 'Deploy these Docker images to AKS?',
+                        parameters: [
+                            choice(
+                                name: 'DEPLOYMENT_APPROVAL',
+                                choices: ['No', 'Yes'],
+                                description: 'Click "Yes" to proceed with AKS deployment'
+                            )
+                        ]
+                    )
+                    
+                    if (userInput != 'Yes') {
+                        error('AKS deployment cancelled by user')
+                    }
+                    echo '✓ Deployment approved! Proceeding with AKS deployment...'
+                }
             }
         }
 
-        stage('8. Verify Deployment') {
+        stage('8. Deploy to AKS') {
             steps {
-                echo '===== Verify Deployment ====='
-                bat '''
-                kubectl rollout status deployment/user-service --timeout=300s
-                kubectl rollout status deployment/order-service --timeout=300s
-                kubectl rollout status deployment/tracking-service --timeout=300s
-                kubectl rollout status deployment/gudang-service --timeout=300s
-                kubectl rollout status deployment/courier-service --timeout=300s
-                kubectl rollout status deployment/report-service --timeout=300s
-                kubectl rollout status deployment/payment-service --timeout=300s
+                echo '===== Deploying to AKS ====='
+                script {
+                    try {
+                        bat """
+                        kubectl set image deployment/user-service user-service=${DOCKER_USERNAME}/user-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/order-service order-service=${DOCKER_USERNAME}/order-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/tracking-service tracking-service=${DOCKER_USERNAME}/tracking-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/gudang-service gudang-service=${DOCKER_USERNAME}/gudang-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/courier-service courier-service=${DOCKER_USERNAME}/courier-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/report-service report-service=${DOCKER_USERNAME}/report-service:${IMAGE_TAG} --record
+                        kubectl set image deployment/payment-service payment-service=${DOCKER_USERNAME}/payment-service:${IMAGE_TAG} --record
+                        """
+                        echo '✓ All services updated in AKS'
+                    } catch (Exception e) {
+                        echo '✗ Failed to update AKS deployments'
+                        throw e
+                    }
+                }
+            }
+        }
 
-                kubectl get pods
-                kubectl get svc
-                kubectl get deployments
-                '''
+        stage('9. Verify Deployment') {
+            steps {
+                echo '===== Verify Deployment and Rollout Status ====='
+                script {
+                    try {
+                        bat '''
+                        echo Checking rollout status for all services...
+                        kubectl rollout status deployment/user-service --timeout=300s
+                        kubectl rollout status deployment/order-service --timeout=300s
+                        kubectl rollout status deployment/tracking-service --timeout=300s
+                        kubectl rollout status deployment/gudang-service --timeout=300s
+                        kubectl rollout status deployment/courier-service --timeout=300s
+                        kubectl rollout status deployment/report-service --timeout=300s
+                        kubectl rollout status deployment/payment-service --timeout=300s
+
+                        echo.
+                        echo ===== Current Pods Status =====
+                        kubectl get pods -o wide
+
+                        echo.
+                        echo ===== Current Services =====
+                        kubectl get svc
+
+                        echo.
+                        echo ===== Current Deployments =====
+                        kubectl get deployments
+                        '''
+                        echo '✓ All deployments verified successfully!'
+                    } catch (Exception e) {
+                        echo '✗ Deployment verification failed'
+                        echo 'Attempting rollback...'
+                        // Optional: Add rollback logic here
+                        throw e
+                    }
+                }
             }
         }
     }
 
     post {
         success {
-            echo '✓ Pipeline executed successfully!'
-            echo 'All microservices deployed to AKS!'
+            echo '✓✓✓ Pipeline executed successfully! ✓✓✓'
+            echo 'All microservices deployed and verified in AKS!'
         }
         failure {
-            echo '✗ Pipeline failed. Check logs above.'
+            echo '✗✗✗ Pipeline failed. Check logs above. ✗✗✗'
+            echo 'Build ID: ${env.BUILD_ID}'
         }
         always {
             cleanWs()
